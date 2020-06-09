@@ -24,7 +24,7 @@ uint8[] cn0_bds                 # Carrier-to-Noise density of Beidou satellites.
 uint8 num_gal_sat               # Number of GALILEO satellites.
 uint8[] cn0_gal                 # Carrier-to-Noise density of GALILEO satellites. Zero implies invalid cn0 [dB Hz / 4].
 string fix_mode                 # Invalid, Single Point Position (SPP), Differential GNSS (DGNSS), Float RTK, Fixed RTK.
-
+string ins_mode                 # INS used or not used.
 
 # codes available in message "MeasurementState.msg"
 
@@ -36,3 +36,7 @@ string STR_FIX_MODE_FIXED_RTK      = FIXED_RTK
 string STR_FIX_MODE_DEAD_RECKONING = DEAD_RECKONING
 string STR_FIX_MODE_SBAS           = SBAS
 string STR_FIX_MODE_UNKNOWN        = Unknown
+
+string INS_NAV_MODE_NONE           = INS_NONE
+string INS_NAV_MODE_USED           = INS_USED
+string INS_NAV_MODE_UNKNOWN        = Unknown
