@@ -19,10 +19,10 @@ from sensor_msgs.msg import NavSatFix, NavSatStatus, Imu, MagneticField
 import piksi_rtk_msgs # TODO(rikba): If we dont have this I get NameError: global name 'piksi_rtk_msgs' is not defined.
 from piksi_rtk_msgs.msg import (AgeOfCorrections, BaselineEcef, BaselineHeading, BaselineNed, BasePosEcef, BasePosLlh,
                                 DeviceMonitor_V2_3_15, DopsMulti, ExtEvent, GpsTimeMulti, Heartbeat, ImuRawMulti,
-                                InfoWifiCorrections, Log, MagRaw, MeasurementState_V2_4_1, Observation,
+                                InfoWifiCorrections, INSStatus, Log, MagRaw, MeasurementState_V2_4_1, Observation,
                                 PositionWithCovarianceStamped, PosEcef, PosEcefCov, PosLlhCov, PosLlhMulti,
                                 ReceiverState_V2_4_1, UartState_V2_3_15, UtcTimeMulti,
-                                VelEcef, VelEcefCov, VelNed, VelNedCov, VelocityWithCovarianceStamped)
+                                VelBody, VelEcef, VelEcefCov, VelNed, VelNedCov, VelocityWithCovarianceStamped)
 from piksi_rtk_msgs.srv import *
 from geometry_msgs.msg import (PoseWithCovarianceStamped, PointStamped, PoseWithCovariance, Point, TransformStamped,
                                Transform)
@@ -150,6 +150,7 @@ class PiksiMulti:
         self.var_rtk_float = rospy.get_param('~var_rtk_float', [25.0, 25.0, 64.0])
         self.var_rtk_fix = rospy.get_param('~var_rtk_fix', [0.0049, 0.0049, 0.01])
         self.var_spp_sbas = rospy.get_param('~var_spp_sbas', [1.0, 1.0, 1.0])
+        self.var_deadreckoning = rospy.get_param('~var_spp_sbas', [1.0, 1.0, 1.0])
         self.navsatfix_frame_id = rospy.get_param('~navsatfix_frame_id', 'gps')
 
         # Covariance topic settings.
@@ -294,6 +295,11 @@ class PiksiMulti:
                                SBP_MSG_MAG_RAW, MsgMagRaw, 'tow', 'tow_f', 'mag_x', 'mag_y', 'mag_z')
             self.handler.add_callback(self.cb_sbp_mag_raw, msg_type=SBP_MSG_MAG_RAW)
 
+        self.handler.add_callback(self.cb_sbp_ins_status, msg_type=SBP_MSG_INS_STATUS)
+	    self.handler.add_callback(self.cb_sbp_vel_body, msg_type=SBP_MSG_VEL_BODY)
+	    self.handler.add_callback(self.cb_sbp_angular_rate, msg_type=SBP_MSG_ANGULAR_RATE)
+	    self.handler.add_callback(self.cb_sbp_orient_quat, msg_type=SBP_MSG_ORIENT_QUAT)
+
         # Only if debug mode
         if self.debug_mode:
             self.handler.add_callback(self.cb_sbp_base_pos_llh, msg_type=SBP_MSG_BASE_POS_LLH)
@@ -335,7 +341,7 @@ class PiksiMulti:
         receiver_state_msg.cn0_sbas = []  # Unknown.
         receiver_state_msg.num_glonass_sat = 0  # Unknown.
         receiver_state_msg.cn0_glonass = []  # Unknown.
-        receiver_state_msg.fix_mode = ReceiverState_V2_4_1.STR_FIX_MODE_UNKNOWN
+        receiver_state_msg.fix_mode = ReceiverState_V2_4_1.INS_NAV_MODE_UNKNOWN
 
         return receiver_state_msg
 
@@ -365,6 +371,14 @@ class PiksiMulti:
                                             NavSatFix, queue_size=10)
         publishers['best_fix'] = rospy.Publisher(rospy.get_name() + '/navsatfix_best_fix',
                                                  NavSatFix, queue_size=10)
+        publishers['deadreckoning'] = rospy.Publisher(rospy.get_name() + '/navsatfix_dr_fix',
+                                                 NavSatFix, queue_size=10)
+        publishers['enu_pose_dr'] = rospy.Publisher(rospy.get_name() + '/enu_pose_dr',
+                                                     PoseWithCovarianceStamped, queue_size=10)
+        publishers['enu_point_dr'] = rospy.Publisher(rospy.get_name() + '/enu_point_dr',
+                                                      PointStamped, queue_size=10)
+        publishers['enu_transform_dr'] = rospy.Publisher(rospy.get_name() + '/enu_transform_dr',
+                                                          TransformStamped, queue_size=10)
         publishers['heartbeat'] = rospy.Publisher(rospy.get_name() + '/heartbeat',
                                                   Heartbeat, queue_size=10)
         publishers['measurement_state'] = rospy.Publisher(rospy.get_name() + '/measurement_state',
@@ -426,6 +440,16 @@ class PiksiMulti:
                                                     Imu, queue_size=10)
             publishers['mag'] = rospy.Publisher(rospy.get_name() + '/mag',
                                                     MagneticField, queue_size=10)
+
+        # Inertial messages
+        publishers['imu_angular_velocity'] = rospy.Publisher(rospy.get_name() + '/imu_angular_velocity',
+                                                    Imu, queue_size=10)
+        publishers['imu_orientation'] = rospy.Publisher(rospy.get_name() + '/imu_orientation',
+                                                    Imu, queue_size=10)
+        publishers['ins_status'] = rospy.Publisher(rospy.get_name() + '/ins_status',
+                                                  INSStatus, queue_size=10)
+        publishers['vel_body'] = rospy.Publisher(rospy.get_name() + '/vel_body',
+                                                  VelBody, queue_size=10)
 
         # Topics published only if in "debug mode".
         if self.debug_mode:
@@ -791,9 +815,7 @@ class PiksiMulti:
             self.publish_rtk_fix(msg.lat, msg.lon, msg.height, stamp, self.var_rtk_fix)
         # Dead reckoning
         elif fix_mode == PosLlhMulti.FIX_MODE_DEAD_RECKONING:
-            rospy.logwarn(
-                "[cb_sbp_pos_llh]: case FIX_MODE_DEAD_RECKONING was not implemented yet." +
-                "Contact the package/repository maintainers.")
+            self.publish_deadreckoning(msg.lat, msg.lon, msg.height, stamp, self.var_deadreckoning)
             return
         # SBAS Position
         elif fix_mode == PosLlhMulti.FIX_MODE_SBAS:
@@ -824,6 +846,15 @@ class PiksiMulti:
             self.receiver_state_msg.fix_mode = ReceiverState_V2_4_1.STR_FIX_MODE_SBAS
         else:
             self.receiver_state_msg.fix_mode = ReceiverState_V2_4_1.STR_FIX_MODE_UNKNOWN
+
+        #Inertial Navigation Mode
+        inertial_nav_mode = (msg.flags & 0x18) >> 3
+        if inertial_nav_mode == 0:
+            self.receiver_state_msg.ins_mode = ReceiverState_V2_4_1.INS_NAV_MODE_NONE
+        elif inertial_nav_mode == 1:
+            self.receiver_state_msg.ins_mode = ReceiverState_V2_4_1.INS_NAV_MODE_USED
+        else:
+            self.receiver_state_msg.ins_mode = ReceiverState_V2_4_1.INS_NAV_MODE_UNKNOWN
 
         self.publish_receiver_state_msg()
 
@@ -1073,6 +1104,13 @@ class PiksiMulti:
                                  self.publishers['enu_transform_fix'], self.publishers['best_fix'],
                                  self.publishers['enu_pose_best_fix'])
 
+    def publish_deadreckoning(self, latitude, longitude, height, stamp, variance):
+        self.publish_wgs84_point(latitude, longitude, height, stamp, variance, NavSatStatus.STATUS_GBAS_FIX,
+                                 self.publishers['deadreckoning'],
+                                 self.publishers['enu_pose_dr'], self.publishers['enu_point_dr'],
+                                 self.publishers['enu_transform_dr'], self.publishers['best_fix'],
+                                 self.publishers['enu_pose_best_fix'])
+
     def publish_wgs84_point(self, latitude, longitude, height, stamp, variance, navsat_status, pub_navsatfix, pub_pose,
                             pub_point, pub_transform, pub_navsatfix_best_pose, pub_pose_best_fix):
         # Navsatfix message.
@@ -1128,6 +1166,81 @@ class PiksiMulti:
             transform_msg.child_frame_id = self.transform_child_frame_id
             transform_msg.transform = self.enu_to_transform_msg(east, north, up)
             pub_transform.publish(transform_msg)
+
+    def cb_sbp_vel_body(self, msg_raw, **metadata):
+        msg = MsgVelBody(msg_raw)
+
+        vel_body_msg = VelBody()
+        vel_body_msg.header.stamp = rospy.Time.now()
+        vel_body_msg.velocity.x = msg.x
+        vel_body_msg.velocity.y = msg.y
+        vel_body_msg.velocity.z = msg.z
+        vel_body_msg.cov_xx = msg.cov_x_x
+        vel_body_msg.cov_xy = msg.cov_x_y
+        vel_body_msg.cov_xz = msg.cov_x_z
+        vel_body_msg.cov_yy = msg.cov_y_y
+        vel_body_msg.cov_yz = msg.cov_y_z
+        vel_body_msg.cov_zz = msg.cov_z_z
+
+        if (msg.flags & 0x07) == 0:
+            vel_body_msg.vel_mode = VelBody.VEL_MODE_INVALID
+        elif (msg.flags & 0x07) == 1:
+            vel_body_msg.vel_mode = VelBody.VEL_MODE_MEASURED
+        elif (msg.flags & 0x07) == 2:
+            vel_body_msg.vel_mode = VelBody.VEL_MODE_COMPUTED
+        elif (msg.flags & 0x07) == 3:
+            vel_body_msg.vel_mode = VelBody.VEL_MODE_DR
+        else:
+            vel_body_msg.vel_mode = -1
+
+        if ((msg.flags & 0x18)>>3) == 0:
+            vel_body_msg.ins_mode = VelBody.INS_NAV_MODE_NONE
+        elif ((msg.flags & 0x07)>>3) == 1:
+            vel_body_msg.ins_mode = VelBody.INS_NAV_MODE_USED
+        else:
+            vel_body_msg.ins_mode = -1
+        self.publishers['vel_body'].publish(vel_body_msg)
+
+    def cb_sbp_angular_rate(self, msg_raw, **metadata):
+        msg = MsgAngularRate(msg_raw)
+
+        mag_imu_msg = Imu()
+        mag_imu_msg.orientation_covariance[0] = -1
+
+        mag_imu_msg.angular_velocity.x = radians(msg.x/10*6)
+        mag_imu_msg.angular_velocity.y = radians(msg.y/10*6)
+        mag_imu_msg.angular_velocity.z = radians(msg.z/10*6)
+
+        mag_imu_msg.linear_acceleration_covariance[0] = -1
+
+        self.publishers['imu_angular_velocity'].publish(mag_imu_msg)
+
+    def cb_sbp_orient_quat(self, msg_raw, **metadata):
+        msg = MsgOrientQuat(msg_raw)
+
+        imu_msg = Imu()
+        imu_msg.orientation.x = msg_raw.x
+        imu_msg.orientation.y = msg_raw.y
+        imu_msg.orientation.z = msg_raw.z
+        imu_msg.orientation.w = msg_raw.w
+
+        imu_msg.angular_velocity_covariance[0] = -1
+
+        imu_msg.linear_acceleration_covariance[0] = -1
+
+        self.publishers['imu_orientation'].publish(imu_msg)
+
+
+    def cb_sbp_ins_status(self, msg_raw, **metadata):
+        msg = MsgInsStatus(msg_raw)
+
+        ins_status_msg = INSStatus()
+        ins_status_msg.header.stamp = rospy.Time.now()
+        ins_status_msg.mode = msg.flags & 0x07
+        ins_status_msg.gnss_fix = msg.flags & 0x08
+        ins_status_msg.ins_error = (msg.flags & 0xF0) >> 4
+
+        self.publishers['ins_status'].publish(ins_status_msg)
 
     def cb_sbp_heartbeat(self, msg_raw, **metadata):
         msg = MsgHeartbeat(msg_raw)
