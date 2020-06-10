@@ -815,7 +815,6 @@ class PiksiMulti:
         # Dead reckoning
         elif fix_mode == PosLlhMulti.FIX_MODE_DEAD_RECKONING:
             self.publish_deadreckoning(msg.lat, msg.lon, msg.height, stamp, self.var_dr_fix)
-            return
         # SBAS Position
         elif fix_mode == PosLlhMulti.FIX_MODE_SBAS:
             self.publish_spp(msg.lat, msg.lon, msg.height, stamp, self.var_spp_sbas, NavSatStatus.STATUS_SBAS_FIX)
