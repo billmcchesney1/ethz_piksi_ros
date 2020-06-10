@@ -340,7 +340,8 @@ class PiksiMulti:
         receiver_state_msg.cn0_sbas = []  # Unknown.
         receiver_state_msg.num_glonass_sat = 0  # Unknown.
         receiver_state_msg.cn0_glonass = []  # Unknown.
-        receiver_state_msg.fix_mode = ReceiverState_V2_4_1.INS_NAV_MODE_UNKNOWN
+        receiver_state_msg.fix_mode = ReceiverState_V2_4_1.STR_FIX_MODE_UNKNOWN
+        receiver_state_msg.ins_mode = ReceiverState_V2_4_1.INS_NAV_MODE_UNKNOWN
 
         return receiver_state_msg
 
