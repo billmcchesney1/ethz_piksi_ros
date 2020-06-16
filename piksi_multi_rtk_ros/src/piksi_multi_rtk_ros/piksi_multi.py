@@ -1222,12 +1222,16 @@ class PiksiMulti:
         msg = MsgOrientQuat(msg_raw)
 
         imu_msg = Imu()
+        imu_msg.header.stamp = rospy.Time.now()
+        imu_msg.header.frame_id = 'piksi_link'
+
         imu_msg.orientation.x = msg.x*(2**-31)
         imu_msg.orientation.y = msg.y*(2**-31)
         imu_msg.orientation.z = msg.z*(2**-31)
         imu_msg.orientation.w = msg.w*(2**-31)
-        imu_msg.orientation_covariance[0] = (imu_msg.orientation.x**2) + (imu_msg.orientation.y**2) + (imu_msg.orientation.z**2) + (imu_msg.orientation.w**2)
-        imu_msg.orientation_covariance[1] = msg.x*(2**-31)**2 + msg.y*(2**-31)**2 + msg.z*(2**-31)**2 + msg.w*(2**-31)**2
+        imu_msg.orientation_covariance[0] = 0.001
+        imu_msg.orientation_covariance[4] = 0.001
+        imu_msg.orientation_covariance[8] = 0.001
         imu_msg.angular_velocity_covariance[0] = -1
 
         imu_msg.linear_acceleration_covariance[0] = -1
