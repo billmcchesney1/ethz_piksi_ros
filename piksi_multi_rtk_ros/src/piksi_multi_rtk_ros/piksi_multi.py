@@ -290,13 +290,13 @@ class PiksiMulti:
 
         # Raw IMU and Magnetometer measurements.
         if self.publish_raw_imu_and_mag:
-            self.init_callback('imu_raw', ImuRawMulti,
-                               SBP_MSG_IMU_RAW, MsgImuRaw,
-                               'tow', 'tow_f', 'acc_x', 'acc_y', 'acc_z', 'gyr_x', 'gyr_y', 'gyr_z')
+            # self.init_callback('imu_raw', ImuRawMulti,
+            #                    SBP_MSG_IMU_RAW, MsgImuRaw,
+            #                    'tow', 'tow_f', 'acc_x', 'acc_y', 'acc_z', 'gyr_x', 'gyr_y', 'gyr_z')
             self.handler.add_callback(self.cb_sbp_imu_raw, msg_type=SBP_MSG_IMU_RAW)
             self.handler.add_callback(self.cb_sbp_imu_aux, msg_type=SBP_MSG_IMU_AUX)
-            self.init_callback('mag_raw', MagRaw,
-                               SBP_MSG_MAG_RAW, MsgMagRaw, 'tow', 'tow_f', 'mag_x', 'mag_y', 'mag_z')
+            # self.init_callback('mag_raw', MagRaw,
+            #                    SBP_MSG_MAG_RAW, MsgMagRaw, 'tow', 'tow_f', 'mag_x', 'mag_y', 'mag_z')
             self.handler.add_callback(self.cb_sbp_mag_raw, msg_type=SBP_MSG_MAG_RAW)
 
         # Only if debug mode
