@@ -1702,8 +1702,8 @@ class PiksiMulti:
 
         mag_msg.header.frame_id = 'piksi_imu'
 
-        mag_msg.magnetic_field.x = msg.mag_x * PiksiMulti.kMagScaleXY
-        mag_msg.magnetic_field.y = msg.mag_y * PiksiMulti.kMagScaleXY
+        mag_msg.magnetic_field.x = -msg.mag_y * PiksiMulti.kMagScaleXY
+        mag_msg.magnetic_field.y = msg.mag_x * PiksiMulti.kMagScaleXY
         mag_msg.magnetic_field.z = msg.mag_z * PiksiMulti.kMagScaleZ
 
         self.publishers['mag'].publish(mag_msg)
